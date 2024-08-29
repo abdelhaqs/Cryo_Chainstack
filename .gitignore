@@ -1,0 +1,10 @@
+# Ignore parquet
+*.txt
+*.parquet
+*.env
+
+# Ignore virtual environment folders
+cryo-and-python/
+cryo/
+dbt-env/
+ARCHIVE/
