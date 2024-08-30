@@ -16,12 +16,14 @@ services:
     build: .
     environment:
       - ETH_RPC=${ETH_RPC}
-      - DB_HOST=postgres
+      - DB_HOST=postgres  # This should match the service name for PostgreSQL
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
     depends_on:
       - postgres
+    volumes:
+      - .:/app
 
 volumes:
   postgres_data:
