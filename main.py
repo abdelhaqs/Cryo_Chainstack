@@ -50,42 +50,6 @@ def collect_and_insert_blocks(engine, start_block, end_block):
     hex=True,
     requests_per_second=50
     )
-    
-    data = cryo.collect(
-        "blocks", 
-        blocks=[f"{start_block}:{end_block}"], 
-        rpc=eth_rpc, 
-        output_format="pandas", 
-        hex=True
-    )
-
-    # Displaying the column names of the DataFrame
-    print("Columns in the DataFrame:")
-    for column in data.columns:
-        print(column)
-
-    # Print the entire DataFrame
-    print(data)
-    print(type(data))
-    print(len(data))
-
-    # Convert problematic columns to int64 if necessary
-    for column in data.select_dtypes(include=['uint64']).columns:
-        data[column] = data[column].astype('int64')
-''' 
-    # Infer the schema from the DataFrame and create the table in the specified schema
-    schema_name = 'sepolia_optimism'
-    table_name = 'blocks'
-
-    create_schema_if_not_exists(engine, schema_name)
-
-    data.head(n=0).to_sql(name=table_name, con=engine, schema=schema_name, if_exists='replace', index=False)
-
-    # Insert data into the table
-    data.to_sql(name=table_name, con=engine, schema=schema_name, if_exists='append', index=False)
-
-    print(f"Schema: {schema_name}, Table: {table_name}, Rows inserted: {len(data)}")
-''' 
 
 def collect_and_insert_logs(engine, start_block, end_block):
     # Collect logs data using the cryo library and return it as a pandas DataFrame
@@ -99,34 +63,6 @@ def collect_and_insert_logs(engine, start_block, end_block):
         hex=True,
         requests_per_second=50
     )
-
-    # Displaying the column names of the logs DataFrame
-    print("Columns in the logs DataFrame:")
-    for column in logs_data.columns:
-        print(column)
-
-    # Print the entire logs DataFrame
-    print(logs_data)
-    print(type(logs_data))
-    print(len(logs_data))
-    ''' 
-    # Convert problematic columns to int64 if necessary
-    for column in logs_data.select_dtypes(include=['uint64']).columns:
-        logs_data[column] = logs_data[column].astype('int64')
-
-    # Infer the schema from the DataFrame and create the table in the specified schema
-    schema_name = 'sepolia_optimism'
-    table_name = 'logs'
-
-    create_schema_if_not_exists(engine, schema_name)
-
-    logs_data.head(n=0).to_sql(name=table_name, con=engine, schema=schema_name, if_exists='replace', index=False)
-
-    # Insert data into the table
-    logs_data.to_sql(name=table_name, con=engine, schema=schema_name, if_exists='append', index=False)
-
-    print(f"Schema: {schema_name}, Table: {table_name}, Rows inserted: {len(logs_data)}")
-    ''' 
     
 def collect_and_insert_transactions(engine, start_block, end_block):
     # Collect blockchain data using the cryo library and return it as a pandas DataFrame
@@ -140,48 +76,6 @@ def collect_and_insert_transactions(engine, start_block, end_block):
         hex=True,
         requests_per_second=50
     )
-'''     
-    data = cryo.collect(
-        "transaction", 
-        transactions=[f"{start_block}:{end_block}"], 
-        rpc=eth_rpc, 
-        output_format="pandas", 
-        hex=True
-    )
-
-    # Displaying the column names of the DataFrame
-    print("Columns in the DataFrame:")
-    for column in data.columns:
-        print(column)
-
-    # Print the entire DataFrame
-    print(data)
-    print(type(data))
-    print(len(data))
-
-    # Convert problematic columns to int64 if necessary
-    for column in data.select_dtypes(include=['uint64']).columns:
-        data[column] = data[column].astype('int64')
-'''
-''' 
-    # Convert problematic columns to int64 if necessary
-    for column in transactions_data.select_dtypes(include=['uint64']).columns:
-        transactions_data[column] = transactions_data[column].astype('int64')
-
-    # Infer the schema from the DataFrame and create the table in the specified schema
-    schema_name = 'sepolia_optimism'
-    table_name = 'transactions'
-
-    create_schema_if_not_exists(engine, schema_name)
-
-    transactions_data.head(n=0).to_sql(name=table_name, con=engine, schema=schema_name, if_exists='replace', index=False)
-
-    # Insert data into the table
-    transactions_data.to_sql(name=table_name, con=engine, schema=schema_name, if_exists='append', index=False)
-
-    print(f"Schema: {schema_name}, Table: {table_name}, Rows inserted: {len(transactions_data)}")
-''' 
-
 
 def main():
     # Create SQLAlchemy engine for PostgreSQL
@@ -195,10 +89,10 @@ def main():
     end_block = start_block + 100  # Adjust the range as needed
 
     # Collect and insert new blocks
-    # collect_and_insert_blocks(engine, start_block, end_block)
+    collect_and_insert_blocks(engine, start_block, end_block)
     
     # Collect and insert logs
-    # collect_and_insert_logs(engine, start_block, end_block)
+    collect_and_insert_logs(engine, start_block, end_block)
 
     # Collect and insert transactions
     collect_and_insert_transactions(engine, start_block, end_block)
