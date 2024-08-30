@@ -8,3 +8,6 @@ cryo-and-python/
 cryo/
 dbt-env/
 ARCHIVE/
+
+# Cryo reports folders
+.cryo/

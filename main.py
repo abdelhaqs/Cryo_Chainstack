@@ -1,8 +1,6 @@
 import os
 import cryo
 from dotenv import load_dotenv
-import pandas as pd
-from sqlalchemy import create_engine, text
 
 # Load environment variables from .env file
 load_dotenv()
@@ -13,12 +11,6 @@ db_host = os.getenv("DB_HOST")
 db_name = os.getenv("DB_NAME")
 db_user = os.getenv("DB_USER")
 db_password = os.getenv("DB_PASSWORD")
-
-print(f"ETH_RPC: {eth_rpc}")
-print(f"DB_HOST: {db_host}")
-print(f"DB_NAME: {db_name}")
-print(f"DB_USER: {db_user}")
-print(f"DB_PASSWORD: {db_password}")
 
 LAST_PROCESSED_BLOCK_FILE = 'last_processed_block.txt'
 
@@ -33,12 +25,7 @@ def set_last_processed_block(block_number):
     with open(LAST_PROCESSED_BLOCK_FILE, 'w') as file:
         file.write(str(block_number))
 
-def create_schema_if_not_exists(engine, schema_name):
-    with engine.connect() as conn:
-        conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema_name}"))
-        conn.commit()  # Ensure the schema creation is committed
-
-def collect_and_insert_blocks(engine, start_block, end_block):
+def collect_blocks(start_block, end_block):
     # Collect blockchain data using the cryo library and return it as a pandas DataFrame
     blocks_data = cryo.freeze(
     "blocks",
@@ -51,7 +38,7 @@ def collect_and_insert_blocks(engine, start_block, end_block):
     requests_per_second=50
     )
 
-def collect_and_insert_logs(engine, start_block, end_block):
+def collect_logs(start_block, end_block):
     # Collect logs data using the cryo library and return it as a pandas DataFrame
     logs_data = cryo.freeze(
         "logs", 
@@ -64,7 +51,7 @@ def collect_and_insert_logs(engine, start_block, end_block):
         requests_per_second=50
     )
     
-def collect_and_insert_transactions(engine, start_block, end_block):
+def collect_transactions(start_block, end_block):
     # Collect blockchain data using the cryo library and return it as a pandas DataFrame
     transactions_data = cryo.freeze(
         "transactions", 
@@ -78,9 +65,6 @@ def collect_and_insert_transactions(engine, start_block, end_block):
     )
 
 def main():
-    # Create SQLAlchemy engine for PostgreSQL
-    engine = create_engine(f'postgresql+psycopg2://{db_user}:{db_password}@{db_host}/{db_name}')
-
     # Get the last processed block number
     last_processed_block = get_last_processed_block()
 
@@ -88,14 +72,14 @@ def main():
     start_block = last_processed_block + 1
     end_block = start_block + 100  # Adjust the range as needed
 
-    # Collect and insert new blocks
-    collect_and_insert_blocks(engine, start_block, end_block)
+    # Collect new blocks
+    collect_blocks(start_block, end_block)
     
-    # Collect and insert logs
-    collect_and_insert_logs(engine, start_block, end_block)
+    # Collect logs
+    collect_logs(start_block, end_block)
 
-    # Collect and insert transactions
-    collect_and_insert_transactions(engine, start_block, end_block)
+    # Collect transactions
+    collect_transactions(start_block, end_block)
 
     # Update the last processed block number
     set_last_processed_block(end_block)
