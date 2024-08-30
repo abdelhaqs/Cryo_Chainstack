@@ -1,6 +1,8 @@
 import os
 import cryo
 from dotenv import load_dotenv
+import duckdb
+import pandas as pd
 
 # Load environment variables from .env file
 load_dotenv()
@@ -64,6 +66,40 @@ def collect_transactions(start_block, end_block):
         requests_per_second=50
     )
 
+def create_or_replace_table_logs(db_path):
+    sql_query = '''
+    CREATE OR REPLACE TABLE optimism_sepolia_logs AS
+    SELECT *
+    FROM read_parquet(
+      'raw/logs/*.parquet'
+      )
+    '''
+    with duckdb.connect(db_path) as con:
+        con.sql(sql_query)
+
+def create_or_replace_table_blocks(db_path):
+    sql_query = '''
+    CREATE OR REPLACE TABLE optimism_sepolia_blocks AS
+    SELECT *
+    FROM read_parquet(
+      'raw/blocks/*.parquet'
+      )
+    '''
+    with duckdb.connect(db_path) as con:
+        con.sql(sql_query)
+
+def create_or_replace_table_transactions(db_path):
+    sql_query = '''
+    CREATE OR REPLACE TABLE optimism_sepolia_transactions AS
+    SELECT *
+    FROM read_parquet(
+      'raw/transactions/*.parquet'
+      )
+    '''
+    with duckdb.connect(db_path) as con:
+        con.sql(sql_query)
+
+
 def main():
     # Get the last processed block number
     last_processed_block = get_last_processed_block()
@@ -74,15 +110,17 @@ def main():
 
     # Collect new blocks
     collect_blocks(start_block, end_block)
-    
     # Collect logs
     collect_logs(start_block, end_block)
-
     # Collect transactions
     collect_transactions(start_block, end_block)
-
     # Update the last processed block number
     set_last_processed_block(end_block)
+
+    db_path = 'data/BLOCKCHAIN.db'
+    create_or_replace_table_logs(db_path)
+    create_or_replace_table_blocks(db_path)
+    create_or_replace_table_transactions(db_path)
 
 if __name__ == "__main__":
     main()

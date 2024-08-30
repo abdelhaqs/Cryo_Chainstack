@@ -3,6 +3,7 @@
 !requirements.txt
 *.parquet
 *.env
+*.db
 
 # Ignore virtual environment folders
 cryo-and-python/
