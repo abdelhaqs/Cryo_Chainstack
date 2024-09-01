@@ -9,6 +9,8 @@
 cryo-and-python/
 cryo/
 ARCHIVE/
+tmpd*/
 
 # Cryo reports folders
 .cryo/
+__pycache__

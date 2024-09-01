@@ -1,72 +1,109 @@
 import os
+import time
 import cryo
+from filelock import FileLock
 from dotenv import load_dotenv
 import duckdb
 import pandas as pd
+from dagster import op, job, schedule, repository, In, Out
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Retrieve the Ethereum RPC URL and PostgreSQL connection details from environment variables
 eth_rpc = os.getenv("ETH_RPC")
-db_host = os.getenv("DB_HOST")
-db_name = os.getenv("DB_NAME")
-db_user = os.getenv("DB_USER")
-db_password = os.getenv("DB_PASSWORD")
 
 LAST_PROCESSED_BLOCK_FILE = 'last_processed_block.txt'
+LOCK_FILE = 'data/blockchain.db.lock'
+MAX_RETRIES = 5
+RETRY_DELAY = 3  # seconds
 
-def get_last_processed_block():
+def acquire_lock(lock_file):
+    """Acquire a file lock to ensure exclusive access."""
+    lock = FileLock(lock_file)
+    lock.acquire()
+    return lock
+
+def release_lock(lock):
+    """Release the file lock."""
+    lock.release()
+
+def execute_query_with_retry(sql_query, db_path, max_retries=MAX_RETRIES, retry_delay=RETRY_DELAY):
+    """Execute a query with retry logic if the database is already open."""
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            with duckdb.connect(db_path) as con:
+                con.sql(sql_query)
+            break  # Exit loop if successful
+        except duckdb.IOException as e:
+            if 'File is already open' in str(e):
+                attempt += 1
+                print(f"Attempt {attempt} failed: {e}. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+            else:
+                raise e  # Rethrow other exceptions
+    else:
+        raise RuntimeError(f"Failed to execute query after {max_retries} attempts.")
+
+@op(out=Out(int))
+def get_last_processed_block_op():
     if os.path.exists(LAST_PROCESSED_BLOCK_FILE):
         with open(LAST_PROCESSED_BLOCK_FILE, 'r') as file:
             return int(file.read().strip())
     else:
-        return 0  # Starting block number for the initial run
+        return 0
 
-def set_last_processed_block(block_number):
+@op(out=Out(int))
+def calculate_start_block_op(last_processed_block: int):
+    return last_processed_block + 1
+
+@op(out=Out(int))
+def calculate_end_block_op(start_block: int):
+    return start_block + 100
+
+@op
+def set_last_processed_block_op(block_number: int):
     with open(LAST_PROCESSED_BLOCK_FILE, 'w') as file:
         file.write(str(block_number))
 
-def collect_blocks(start_block, end_block):
-    # Collect blockchain data using the cryo library and return it as a pandas DataFrame
-    blocks_data = cryo.freeze(
-    "blocks",
-    blocks=[f"{start_block}:{end_block}"], 
-    rpc=eth_rpc,
-    output_dir="raw/blocks",
-    file_format="parquet",
-    #file_name="file_name",
-    hex=True,
-    requests_per_second=50
+@op
+def collect_blocks_op(start_block: int, end_block: int):
+    cryo.freeze(
+        "blocks",
+        blocks=[f"{start_block}:{end_block}"], 
+        rpc=eth_rpc,
+        output_dir="raw/blocks",
+        file_format="parquet",
+        hex=True,
+        requests_per_second=50
     )
 
-def collect_logs(start_block, end_block):
-    # Collect logs data using the cryo library and return it as a pandas DataFrame
-    logs_data = cryo.freeze(
+@op
+def collect_logs_op(start_block: int, end_block: int):
+    cryo.freeze(
         "logs", 
         blocks=[f"{start_block}:{end_block}"], 
         rpc=eth_rpc, 
         output_dir="raw/logs",
         file_format="parquet",
-        #file_name="file_name",
         hex=True,
         requests_per_second=50
     )
-    
-def collect_transactions(start_block, end_block):
-    # Collect blockchain data using the cryo library and return it as a pandas DataFrame
-    transactions_data = cryo.freeze(
+
+@op
+def collect_transactions_op(start_block: int, end_block: int):
+    cryo.freeze(
         "transactions", 
         blocks=[f"{start_block}:{end_block}"], 
         rpc=eth_rpc, 
         output_dir="raw/transactions",
         file_format="parquet",
-        #file_name="file_name",
         hex=True,
         requests_per_second=50
     )
 
-def create_or_replace_table_logs(db_path):
+@op
+def create_or_replace_table_logs_op():
     sql_query = '''
     CREATE OR REPLACE TABLE optimism_sepolia_logs AS
     SELECT *
@@ -74,10 +111,10 @@ def create_or_replace_table_logs(db_path):
       'raw/logs/*.parquet'
       )
     '''
-    with duckdb.connect(db_path) as con:
-        con.sql(sql_query)
+    execute_query_with_retry(sql_query, 'data/BLOCKCHAIN.db')
 
-def create_or_replace_table_blocks(db_path):
+@op
+def create_or_replace_table_blocks_op():
     sql_query = '''
     CREATE OR REPLACE TABLE optimism_sepolia_blocks AS
     SELECT *
@@ -85,10 +122,10 @@ def create_or_replace_table_blocks(db_path):
       'raw/blocks/*.parquet'
       )
     '''
-    with duckdb.connect(db_path) as con:
-        con.sql(sql_query)
+    execute_query_with_retry(sql_query, 'data/BLOCKCHAIN.db')
 
-def create_or_replace_table_transactions(db_path):
+@op
+def create_or_replace_table_transactions_op():
     sql_query = '''
     CREATE OR REPLACE TABLE optimism_sepolia_transactions AS
     SELECT *
@@ -96,31 +133,27 @@ def create_or_replace_table_transactions(db_path):
       'raw/transactions/*.parquet'
       )
     '''
-    with duckdb.connect(db_path) as con:
-        con.sql(sql_query)
+    execute_query_with_retry(sql_query, 'data/BLOCKCHAIN.db')
 
+@job
+def blockchain_etl_job():
+    last_processed_block = get_last_processed_block_op()
+    start_block = calculate_start_block_op(last_processed_block)
+    end_block = calculate_end_block_op(start_block)
 
-def main():
-    # Get the last processed block number
-    last_processed_block = get_last_processed_block()
+    collect_blocks_op(start_block, end_block)
+    collect_logs_op(start_block, end_block)
+    collect_transactions_op(start_block, end_block)
+    set_last_processed_block_op(end_block)
 
-    # Define the range for the new blocks to process
-    start_block = last_processed_block + 1
-    end_block = start_block + 100  # Adjust the range as needed
+    create_or_replace_table_logs_op()
+    create_or_replace_table_blocks_op()
+    create_or_replace_table_transactions_op()
 
-    # Collect new blocks
-    collect_blocks(start_block, end_block)
-    # Collect logs
-    collect_logs(start_block, end_block)
-    # Collect transactions
-    collect_transactions(start_block, end_block)
-    # Update the last processed block number
-    set_last_processed_block(end_block)
+@schedule(cron_schedule="*/18 * * * *", job=blockchain_etl_job, execution_timezone="UTC")
+def blockchain_etl_schedule():
+    return {}
 
-    db_path = 'data/BLOCKCHAIN.db'
-    create_or_replace_table_logs(db_path)
-    create_or_replace_table_blocks(db_path)
-    create_or_replace_table_transactions(db_path)
-
-if __name__ == "__main__":
-    main()
+@repository
+def blockchain_etl_repo():
+    return [blockchain_etl_job, blockchain_etl_schedule]
